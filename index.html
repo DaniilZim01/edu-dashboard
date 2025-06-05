@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EDU Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Vue.js -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- D3.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- Font Awesome для иконок -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>EDU Platform Dashboard</h1>
+            <nav class="tabs">
+                <button 
+                    v-for="tab in tabs" 
+                    :key="tab.id"
+                    :class="['tab-button', { active: currentTab === tab.id }]"
+                    @click="currentTab = tab.id"
+                >
+                    <i :class="tab.icon"></i>
+                    {{ tab.name }}
+                </button>
+            </nav>
+        </header>
+        <main class="dashboard-layout">
+            <!-- Filters Section -->
+            <aside class="filters-section">
+                <div class="filter-group">
+                    <h3>Период</h3>
+                    <select v-model="filters.dateType">
+                        <option value="enrollment">Дата записи</option>
+                        <option value="start">Дата начала</option>
+                        <option value="completion">Дата завершения</option>
+                    </select>
+                    <div class="date-range">
+                        <input type="date" v-model="filters.startDate">
+                        <span>—</span>
+                        <input type="date" v-model="filters.endDate">
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <h3>Сегменты пользователей</h3>
+                    <select v-model="filters.userSegment" multiple>
+                        <option value="hq">HQ</option>
+                        <option value="bigops">BigOps</option>
+                        <option value="business">Бизнес линии</option>
+                        <option value="external">Внешние пользователи</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <h3>Обучение</h3>
+                    <select v-model="filters.course" multiple>
+                        <option v-for="course in courses" :value="course.id">
+                            {{ course.name }}
+                        </option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <h3>Тип обучения</h3>
+                    <select v-model="filters.educationType" multiple>
+                        <option value="primary">Первичное при найме</option>
+                        <option value="regular">Регулярное</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <h3>Владелец обучения</h3>
+                    <select v-model="filters.owner" multiple>
+                        <option v-for="org in organizations" :value="org.id">
+                            {{ org.name }}
+                        </option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <h3>Тип записи</h3>
+                    <select v-model="filters.enrollmentType" multiple>
+                        <option value="assigned">Назначение</option>
+                        <option value="self">Самозапись</option>
+                        <option value="catalog">Самозапись из каталога</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <h3>Грейди</h3>
+                    <select v-model="filters.grade" multiple>
+                        <option v-for="grade in grades" :value="grade">
+                            {{ grade }}
+                        </option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <h3>Рекомендательная система</h3>
+                    <select v-model="filters.recommendationSource" multiple>
+                        <option value="system">Система</option>
+                        <option value="manual">Ручные рекомендации</option>
+                    </select>
+                </div>
+
+                <div class="filter-actions">
+                    <button @click="applyFilters" class="apply-filters">Применить фильтры</button>
+                    <button @click="resetFilters" class="reset-filters">Сбросить</button>
+                </div>
+            </aside>
+
+            <!-- Dashboard Content -->
+            <div class="dashboard-content">
+                <!-- Общий обзор платформы EDU -->
+                <div v-show="currentTab === 'overview'" class="dashboard-container">
+                    <!-- Summary Metrics -->
+                    <div class="summary-metrics">
+                        <div class="metric-card">
+                            <h3>Активные пользователи (MAU)</h3>
+                            <div class="big-number">
+                                <span class="value">{{ formatNumber(overviewData.mau.current) }}</span>
+                                <span :class="['change', overviewData.mau.mom >= 0 ? 'positive' : 'negative']">
+                                    {{ overviewData.mau.mom >= 0 ? '+' : '' }}{{ overviewData.mau.mom }}%
+                                </span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>Коэффициент удержания</h3>
+                            <div class="big-number">
+                                <span class="value">{{ overviewData.stickyFactor.current }}%</span>
+                                <span :class="['change', overviewData.stickyFactor.mom >= 0 ? 'positive' : 'negative']">
+                                    {{ overviewData.stickyFactor.mom >= 0 ? '+' : '' }}{{ overviewData.stickyFactor.mom }}%
+                                </span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>CSAT учеников</h3>
+                            <div class="big-number">
+                                <span class="value">{{ overviewData.studentCSAT.current }}%</span>
+                                <span :class="['change', overviewData.studentCSAT.mom >= 0 ? 'positive' : 'negative']">
+                                    {{ overviewData.studentCSAT.mom >= 0 ? '+' : '' }}{{ overviewData.studentCSAT.mom }}%
+                                </span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>CSAT преподавателей</h3>
+                            <div class="big-number">
+                                <span class="value">{{ overviewData.teacherCSAT.current }}%</span>
+                                <span :class="['change', overviewData.teacherCSAT.mom >= 0 ? 'positive' : 'negative']">
+                                    {{ overviewData.teacherCSAT.mom >= 0 ? '+' : '' }}{{ overviewData.teacherCSAT.mom }}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Доходимость обучения -->
+                    <div class="chart-container full-width">
+                        <h2>Доходимость обучения</h2>
+                        <div class="funnel-container">
+                            <div class="funnel-absolute">
+                                <div id="funnel-absolute-chart"></div>
+                            </div>
+                            <div class="funnel-conversion">
+                                <div id="funnel-conversion-chart"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Charts Row -->
+                    <div class="charts-row">
+                        <!-- Активные пользователи -->
+                        <div class="chart-container">
+                            <h2>Активные пользователи (MAU)</h2>
+                            <div id="mau-chart"></div>
+                        </div>
+
+                        <!-- Коэффициент удержания -->
+                        <div class="chart-container">
+                            <h2>Коэффициент удержания</h2>
+                            <div id="sticky-factor-chart"></div>
+                        </div>
+                    </div>
+
+                    <!-- Secondary Charts Row -->
+                    <div class="charts-row">
+                        <!-- CSAT учеников -->
+                        <div class="chart-container">
+                            <h2>CSAT учеников</h2>
+                            <div id="student-csat-chart"></div>
+                        </div>
+
+                        <!-- CSAT преподавателей -->
+                        <div class="chart-container">
+                            <h2>CSAT преподавателей</h2>
+                            <div id="teacher-csat-chart"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Операционная эффективность обучения -->
+                <div v-show="currentTab === 'operational'" class="dashboard-container">
+                    <!-- Summary Metrics -->
+                    <div class="summary-metrics">
+                        <div class="metric-card">
+                            <h3>Время создания курса</h3>
+                            <div class="big-number">
+                                <span class="value">{{ operationalData.courseCreationTime.current }} дней</span>
+                                <span :class="['change', operationalData.courseCreationTime.mom <= 0 ? 'positive' : 'negative']">
+                                    {{ operationalData.courseCreationTime.mom >= 0 ? '+' : '' }}{{ operationalData.courseCreationTime.mom }}%
+                                </span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>Ручные действия</h3>
+                            <div class="big-number">
+                                <span class="value">{{ operationalData.manualActions.current }}</span>
+                                <span :class="['change', operationalData.manualActions.mom <= 0 ? 'positive' : 'negative']">
+                                    {{ operationalData.manualActions.mom >= 0 ? '+' : '' }}{{ operationalData.manualActions.mom }}%
+                                </span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>CSAT редакторов</h3>
+                            <div class="big-number">
+                                <span class="value">{{ operationalData.detailedCSAT.editors[5].value }}%</span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>CSAT преподавателей</h3>
+                            <div class="big-number">
+                                <span class="value">{{ operationalData.detailedCSAT.teachers[5].value }}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Charts Row -->
+                    <div class="charts-row">
+                        <!-- CSAT детальный -->
+                        <div class="chart-container">
+                            <h2>CSAT детальный</h2>
+                            <div id="detailed-csat-chart"></div>
+                        </div>
+
+                        <!-- Время создания учебного курса -->
+                        <div class="chart-container">
+                            <h2>Время создания учебного курса</h2>
+                            <div id="course-creation-chart"></div>
+                        </div>
+                    </div>
+
+                    <!-- Secondary Charts Row -->
+                    <div class="charts-row">
+                        <!-- Количество учеников на 1 преподавателя -->
+                        <div class="chart-container">
+                            <h2>Количество учеников на 1 преподавателя</h2>
+                            <div id="students-per-teacher-chart"></div>
+                        </div>
+
+                        <!-- Количество ручных действий -->
+                        <div class="chart-container">
+                            <h2>Количество ручных действий при назначении</h2>
+                            <div id="manual-actions-chart"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Вовлечённость и эффективность обучения -->
+                <div v-show="currentTab === 'engagement'" class="dashboard-container">
+                    <!-- Summary Metrics -->
+                    <div class="summary-metrics">
+                        <div class="metric-card">
+                            <h3>Общая конверсия</h3>
+                            <div class="big-number">
+                                <span class="value">{{ engagementData.conversion[0].conversion }}%</span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>Retention платформы</h3>
+                            <div class="big-number">
+                                <span class="value">{{ engagementData.retention.platform[5].value }}%</span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>Конверсия по каналам</h3>
+                            <div class="big-number">
+                                <span class="value">{{ engagementData.conversionChannels.system[5].value }}%</span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>Успешность рекомендаций</h3>
+                            <div class="big-number">
+                                <span class="value">{{ engagementData.recommendations.satisfaction[5].value }}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Charts Row -->
+                    <div class="charts-row">
+                        <!-- Детальная Конверсия -->
+                        <div class="chart-container">
+                            <h2>Детальная Конверсия</h2>
+                            <div class="conversion-table">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Этап</th>
+                                            <th>Конверсия</th>
+                                            <th>Количество</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(item, index) in engagementData.conversion" :key="index">
+                                            <td>{{ item.stage }}</td>
+                                            <td>{{ item.conversion }}%</td>
+                                            <td>{{ formatNumber(item.value) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Retention -->
+                        <div class="chart-container">
+                            <h2>Retention</h2>
+                            <div id="retention-chart"></div>
+                        </div>
+                    </div>
+
+                    <!-- Secondary Charts Row -->
+                    <div class="charts-row">
+                        <!-- Конверсия по каналам -->
+                        <div class="chart-container">
+                            <h2>Конверсия в запись по каналам входа</h2>
+                            <div id="conversion-channels-chart"></div>
+                        </div>
+
+                        <!-- Успешность рекомендаций -->
+                        <div class="chart-container">
+                            <h2>Успешность рекомендаций</h2>
+                            <div id="recommendations-chart"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html> 
